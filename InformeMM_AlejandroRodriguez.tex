@@ -1,0 +1,557 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{hyperref}
+\usepackage{subcaption}
+
+\begin{document}
+\thispagestyle{empty}
+
+\begin{center}
+    \vspace*{2cm}
+
+        {\Huge \textbf{Simulación de Dinámica Molecular del Tripéptido ARC.}\par}
+    
+    \vspace{1cm}
+    \includegraphics[width=10cm]{SelloUMU-positivo (1).png} 
+    
+    \vspace{2.5cm}
+    
+    
+    {\Large Modelado Molecular\par}
+    
+    \vfill
+    
+    {\Large \textbf{Autor:} Alejandro Antonio Rodríguez Garrido \par}
+    \vspace{0.5cm}
+    
+    \vspace*{2cm}
+\end{center}
+
+\newpage
+\tableofcontents
+\newpage
+
+
+\section{Introducción y Objetivos}
+En este informe se detalla la preparación, equilibrado y análisis de una simulación de dinámica molecular del tripéptido ARC utilizando el paquete de software GROMACS. El objetivo principal de este trabajo es evaluar la estabilidad termodinámica y estructural del tripéptido a 298 K, comparándolo con su estado en una simulación a 400 K.
+Para ello, en primer lugar se importa el tripéptido arc.pdb desde la carpeta \textit{for\_students}, ofrecida por el profesor. A continuación, se visualiza el tripéptido usando \textit{pymol}, como se aprecia en la Figura \ref{fig:arc}.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{arc-original.png}
+    \caption{Representación del tripéptido ARC usando \textit{pymol}.}
+    \label{fig:arc}
+\end{figure}
+
+
+\section{Metodología}
+\subsection{Preparación del Sistema (Build)}
+A partir del archivo \texttt{arc.pdb}, se generó la topología del sistema mediante el siguiente comando:
+\begin{verbatim}
+gmx pdb2gmx -f arc.pdb -o arc.gro -p arc.top -ter
+\end{verbatim}
+
+Para la parametrización, se seleccionó el campo de fuerza CHARMM27 y el modelo de agua explícito TIP3P (TIP 3-point).
+A continuación, se definió la celda unitaria (caja de simulación) que contendrá el péptido. Se estableció una geometría cúbica empleando el siguiente comando:
+\begin{verbatim}
+gmx editconf -f arc.gro -o arc-box.gro -bt cubic -box 3.0 3.0 3.0
+\end{verbatim}
+
+En este comando, el argumento \texttt{-bt} especifica el tipo de caja (cúbica) y \texttt{-box} determina sus dimensiones espaciales ($3.0 \times 3.0 \times 3.0$ nm).
+Una vez definida la caja, se procedió a la solvatación del sistema llenando el espacio vacío con moléculas de agua:
+\begin{verbatim}
+gmx solvate -cp arc-box.gro -cs -o arc-box-solv.gro -p arc.top
+\end{verbatim}
+
+El archivo resultante se convirtió a formato PDB para confirmar visualmente, mediante el software PyMOL, la correcta disposición del péptido rodeado por las moléculas de disolvente (Figura \ref{fig:arc+solv}).
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{imagen-arc+solv.png}
+    \caption{Representación del tripéptido ARC rodeado por las moléculas de disolvente en la caja cúbica definida.}
+    \label{fig:arc+solv}
+\end{figure}
+
+\subsection{Equilibrado del Sistema (Equilibration)}
+A partir de este punto, el estudio se dividió en dos simulaciones independientes con el objetivo de modelar el tripéptido a dos temperaturas distintas: 298 K y 400 K. La metodología descrita a continuación es idéntica para ambas, variando únicamente el parámetro térmico de referencia.
+Para el proceso de equilibrado en el ensamble NVT, se utilizó el archivo de configuración \texttt{equiNVT.mdp} (Figura \ref{fig:equiNVT}). En este documento se establecieron los parámetros clave de la simulación: una duración total de 400 ps (\texttt{nsteps}), el guardado de datos cada 0.1 ps, y la generación inicial de velocidades siguiendo una distribución de Maxwell-Boltzmann (\texttt{gen\_vel = yes}). La temperatura objetivo se ajustó mediante los parámetros \texttt{ref\_t} y \texttt{gen\_temp} a 298 K o 400 K, según correspondiera.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{equiNVT.png}
+    \caption{Configuración del archivo \texttt{equiNVT.mdp} para el equilibrado a 298 K.}
+    \label{fig:equiNVT}
+\end{figure}
+
+Antes de ejecutar el equilibrado, se ensamblaron los archivos utilizando \texttt{grompp}:
+\begin{verbatim}
+gmx grompp -f equiNVT.mdp -c arc-box-solv.gro -p arc.top -o arc-a.tpr
+\end{verbatim}
+
+Este comando arrojó una advertencia indicando que el sistema presentaba una carga neta total de +1.00. Esta carga positiva es atribuible al residuo de arginina presente en el péptido. Dado que se requiere que el sistema sea neutro, se neutralizó añadiendo un contraión:
+\begin{verbatim}
+gmx genion -s arc-a.tpr -p arc.top -o arc.gro -nn 1
+\end{verbatim}
+
+Al ejecutar este comando, se seleccionó el grupo del disolvente, permitiendo que el programa sustituyera automáticamente una molécula de agua (en este caso, la molécula 359) por un ion cloruro (Cl$^-$). Para verificar la neutralidad del nuevo sistema, se ejecutó de nuevo \texttt{grompp} , confirmando la siguiente composición final:
+\begin{itemize}
+    \item 5 residuos de proteína (incluyendo grupos protectores terminales).
+    \item 859 residuos de agua.
+    \item 1 ion cloruro.
+\end{itemize}
+
+La inclusión del contraión se verificó adicionalmente mediante inspección visual en PyMOL (Figura \ref{fig:arc+cl}).
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{imagen-arc+solv+cl.png}
+    \caption{Representación del tripéptido ARC rodeado por las moléculas de disolvente y el anión Cloro representado por una cruz verde.}
+    \label{fig:arc+cl}
+\end{figure}
+
+El equilibrado se lanzó a través del sistema de gestión de colas \textit{Slurm} utilizando el script \texttt{submit\_eck.sh} (Figura \ref{fig:submit_eck}). Dicho script especifica la cola de procesamiento, el directorio de trabajo, asigna un único núcleo (1 CPU) a la tarea y ejecuta el siguiente comando principal:
+\begin{verbatim}
+gmx grompp -f equiNVT.mdp -c arc-box-solv.gro -p arc.top -o arc-a.tpr
+\end{verbatim}
+
+La herramienta \texttt{mdrun} es el motor principal de GROMACS que resuelve las ecuaciones de Newton y realiza la integración temporal. El argumento \texttt{-deffnm} define el nombre base (arc) para todos los archivos de entrada, \texttt{-c} especifica el archivo que contendrá las coordenadas y velocidades del último paso de la simulación (\texttt{arc.g96}), y \texttt{-nt 1} restringe el cálculo a un solo hilo de procesamiento.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{submit_eck.png}
+    \caption{Contenido del archivo \texttt{submit\_eck}.}
+    \label{fig:submit_eck}
+\end{figure}
+
+Tras la finalización del proceso, se generaró el archivo de registro \texttt{arc.log} detallando el rendimiento y el archivo \texttt{arc.g96} con la conformación final equilibrada del sistema.
+
+\subsection{Fase de Ejecución (Run)}
+
+Como paso previo al inicio de la fase de producción, se recopilaron los archivos de coordenadas finales (\texttt{arc.g96}) y la topología del sistema (\texttt{arc.top}) generados durante la etapa previa de equilibrado. Asimismo, se importó el archivo de parámetros de control \texttt{runNVT.mdp}, el cual contiene las directrices específicas para esta etapa fundamental (Figura \ref{fig:runNVT}).
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{runNVT.png}
+    \caption{Contenido del archivo \texttt{runNVT.mdp} para la simulación a 298 K.}
+    \label{fig:runNVT}
+\end{figure}
+
+En dicho documento se configuró la simulación para una duración de 2 ps (mediante el parámetro \texttt{nsteps}), estableciendo el guardado de las coordenadas del sistema cada 0.5 fs. A diferencia de la fase anterior, en esta etapa no se generaron nuevas velocidades atómicas iniciales (\texttt{gen\_vel = no}). La temperatura de referencia (\texttt{ref\_t}) se fijó en 298 K o 400 K, según correspondiera a la simulación.
+
+Para la ejecución, se copió y empleó el script \texttt{submit\_eck.sh}. El proceso fue enviado al gestor de colas del clúster mediante el comando \texttt{sbatch}, el cual ejecuta internamente la orden principal de producción (\texttt{mdrun}).
+
+Una vez finalizado el cálculo, se obtuvieron los resultados principales: la trayectoria temporal completa en formato binario de alta precisión (\texttt{arc.trr}), que registra la evolución temporal de las coordenadas, fuerzas y velocidades; y el archivo de estructura de ejecución (\texttt{arc.tpr}).
+
+Con el fin de realizar una evaluación cualitativa y observar la evolución dinámica de las moléculas en el tiempo, se extrajo la trayectoria mediante la siguiente instrucción en la terminal:
+
+\begin{verbatim}
+gmx traj -f arc.trr -s arc.tpr -oxt cartoon.pdb
+\end{verbatim}
+
+Finalmente, la trayectoria resultante (\texttt{cartoon.pdb}) se cargó en el software de representación molecular PyMOL. Esto permitió visualizar la animación tridimensional del movimiento fluctuante del tripéptido y sus interacciones con las moléculas de agua circundantes a lo largo del tiempo de simulación.
+
+
+\section{Análisis de Resultados}
+
+Todos los análisis descritos a continuación se realizaron procesando los archivos de trayectoria (\texttt{arc.trr}), los de estructura (\texttt{arc.tpr}) y energías (\texttt{arc.edr}) generados en la fase de ejecución, extrayendo los datos para las dos simulaciones en estudio (298 K y 400 K).
+
+
+\subsection{Control de Temperatura}
+Para confirmar que la simulación del sistema funcionó correctamente, se analizó en primer lugar la temperatura usando el comando \texttt{gmx traj -f arc.trr -s arc.tpr -xvg none -ot}.
+El termostato ajustó adecuadamente la temperatura de ambas simulaciones a sus valores de referencia. A 298 K, se obtuvo una temperatura media del sistema de 295.9 K con una desviación estándar de 4.64 K. Por su parte, en la simulación de alta temperatura (400 K), la media se situó en 383.5 K con una desviación de 22.54 K. El ensanchamiento de la distribución de frecuencias a 400 K es un comportamiento termodinámico esperado, ya que a mayor temperatura, las fluctuaciones cinéticas del sistema se deberían incrementar proporcionalmente.
+
+\begin{figure}[H]
+    \centering
+    % Figura (a)
+    \begin{subfigure}{0.6\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{298-temp.png}
+        \caption{}
+        \label{fig:temp_298}
+    \end{subfigure}
+    % Figura (b)
+    \begin{subfigure}{0.6\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{400-temp.png}
+        \caption{}
+        \label{fig:temp_400}
+    \end{subfigure}
+    
+    \caption{Comparación de la fluctuación de temperatura del sistema a 298 K (a) y 400 K (b).}
+    \label{fig:comparacion_temp}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    % Figura (a)
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{298-temp_hist.png}
+        \caption{}
+        \label{fig:temp_hist_298}
+    \end{subfigure}\hfill
+    % Figura (b)
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{400-temp_hist.png}
+        \caption{}
+        \label{fig:temp_hist_400}
+    \end{subfigure}
+    
+    \caption{Comparación de la distribución de la temperatura del sistema a 298 K (a) y 400 K (b).}
+    \label{fig:hist_temp}
+\end{figure}
+
+\subsection{Energía Total y Cinética}
+En segundo lugar, se obtuvieron las energías totales y cinéticas de los sistemas usando el comando \texttt{gmx energy -f arc.edr -s arc.tpr -xvg none}.
+La evaluación energética del sistema se realizó aislando las componentes de energía total y energía cinética. 
+
+A 298 K, la energía cinética arrojó un promedio de 9723.71 kJ/mol, mientras que a 400 K el valor ascendió a 12601.20 kJ/mol debido al aumento de energía térmica. Por otro lado, la energía total del sistema osciló en torno a -26290.60 kJ/mol (para 298 K) y -19329.90 kJ/mol (para 400 K). La poca variación energética a lo largo del tiempo en las dos simulaciones pone en relieve la estabilidad del sistema.
+
+\begin{figure}[H]
+    \centering
+    % Figura (a)
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{energia_298.png}
+        \caption{}
+        \label{fig:energia_298}
+    \end{subfigure}\hfill
+    % Figura (b)
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{energia_400.png}
+        \caption{}
+        \label{fig:energia_400}
+    \end{subfigure}
+    
+    \caption{Comparación de las energía totales y cinéticas del sistema a 298 K (a) y 400 K (b).}
+    \label{fig:energia_total_cinetica}
+\end{figure}
+
+
+\subsection{Radio de Giro}
+Con tal de evaluar la topología de la proteína en las dos simulaciones, en primer lugar se obtuvo el ángulo de giro mediante el comando \texttt{gmx gyrate -f arc.trr -s arc.tpr -xvg none} y especificando que la evaluación se haga sobre la proteína.
+El radio de giro permite cuantificar la compacidad del tripéptido. 
+
+A 298 K, el radio de giro presentó fluctuaciones periódicas con un valor medio de 0.446 nm. Al incrementar la energía del sistema a 400 K, el radio de giro experimentó un notable aumento, alcanzando picos de hasta 0.480 nm y siendo la media 0.468 nm. Esto indica un proceso en el cual el péptido abandona conformaciones compactas y empaquetadas para adoptar estados más extendidos.
+
+\begin{figure}[H]
+    \centering
+    % Figura (a)
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{giro_298.png}
+        \caption{}
+        \label{fig:giro_298}
+    \end{subfigure}\hfill
+    % Figura (b)
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{giro_400.png}
+        \caption{}
+        \label{fig:giro_400}
+    \end{subfigure}
+    
+    \caption{Comparación del radio de giro de la proteína a 298 K (a) y 400 K (b).}
+    \label{fig:radio_giro}
+\end{figure}
+
+\subsection{Distancias y Ángulos de Enlace}
+
+Con el fin de analizar las fluctuaciones de los enlaces, se creó un archivo (\texttt{distances.ndx}) que contenía las posiciones exactas de los átomos objeto de estudio. 
+
+Para ambas simulaciones, se seleccionaron y midieron dos distancias específicas: el enlace entre el oxígeno 51 y el carbono 50, pertenecientes al residuo de Cisteína (CYS-4), y el enlace entre el oxígeno 40 y el carbono 39, correspondientes a la Arginina (ARG-3). El bloque de texto introducido en el archivo \texttt{distances.ndx} se estructuró de la siguiente forma:
+
+\begin{verbatim}
+[ C-O-Cys-4 ]
+50 51
+[ C-O-Arg-3 ]
+39 40
+\end{verbatim}
+
+Cabe destacar que la información contenida entre los corchetes actúa únicamente como un comentario y no se lee.
+
+El cálculo de las distancias se llevó a cabo utilizando el siguiente comando:
+\begin{verbatim}
+gmx distance -f arc.trr -s arc.tpr -n distances.ndx -oall -xvg none
+\end{verbatim}
+Durante la ejecución, se solicita que se indique sobre qué par de átomos se desea realizar el cálculo.
+
+Tras procesar los datos, se comprobó que las distancias de enlace medias permanecieron estables en ambas temperaturas (Figura \ref{fig:distancias_panel}), evidenciando la rigidez de este enlace covalente frente al estrés térmico. Para el residuo de Arginina-3, se arrojaron valores promedio de 0.1230 nm a 298 K y 0.1231 nm a 400 K. De manera análoga, el residuo de Cisteína-4 presentó un comportamiento equivalente, registrando distancias de 0.1231 nm a 298 K y 0.1233 nm a 400 K. En todos los casos, las fluctuaciones térmicas (reflejadas en la desviación estándar) se mantuvieron en el orden de $10^{-3}$ nm, lo que confirma que, a pesar del aumento de la temperatura y energía cinética del sistema, la estructura de estos enlaces a nivel local no se ve afectada.
+
+\begin{figure}[H]
+    \centering
+    % (A) Arginina 298K
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{distancia_ARG-3_298K.png}
+        \caption{Arginina-3 a 298 K}
+        \label{fig:dist_arg298}
+    \end{subfigure}\hfill
+    % (B) Cisteína 298K
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{distancia_CYS-4_298K.png}
+        \caption{Cisteína-4 a 298 K}
+        \label{fig:dist_cys298}
+    \end{subfigure}
+
+    \vspace{0.8cm}
+
+    % (C) Arginina 400K
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{distancia_ARG-3_400K.png}
+        \caption{Arginina-3 a 400 K}
+        \label{fig:dist_arg400}
+    \end{subfigure}\hfill
+    % (D) Cisteína 400K
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{distancia_CYS-4_400K.png}
+        \caption{Cisteína-4 a 400 K}
+        \label{fig:dist_cys400}
+    \end{subfigure}
+    
+    \caption{Evolución temporal de las distancias de enlace C-O en los residuos de Arginina-3 y Cisteína-4 a 298 K (imágenes A, B) y 400 K (imágenes C, D).}
+    \label{fig:distancias_panel}
+\end{figure}
+
+
+Posteriormente, para medir los ángulos de enlace, se utilizó como base el mismo archivo \texttt{distances.ndx} creado anteriormente, modificándolo para añadir un tercer átomo a cada grupo. Específicamente, en el grupo de la Cisteína se añadió el átomo de carbono 43, y en el grupo de la Arginina se incluyó el carbono 19.
+
+\begin{verbatim}
+[ C-O-C-Cys-4 ]
+43 50 51
+[ C-O-C-Arg-4 ]
+19 39 40
+\end{verbatim}
+
+El cálculo de las fluctuaciones angulares se ejecutó mediante el siguiente comando:
+
+\begin{verbatim}
+gmx angle -f arc.trr -n distances.ndx -ov -xvg none
+\end{verbatim}
+
+De manera análoga al cálculo de distancias, tras lanzar el comando se seleccionó el grupo angular deseado. Los resultados derivados de este análisis (Figura \ref{fig:angulos_panel}) mostraron una estabilidad similar a la de las distancias, obteniéndose una media de $\approx$ 32 grados. 
+
+En conclusión, la estabilidad de estos parámetros frente a incrementos térmicos demuestra que el campo de fuerza CHARMM27 restringe y parametriza de forma correcta y estable la geometría del tripéptido.
+
+\begin{figure}[H]
+    \centering
+    % (A) Arginina 298K
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{angulo_ARG-3_298K.png}
+        \caption{Arginina-3 a 298 K}
+        \label{fig:ang_arg298}
+    \end{subfigure}\hfill
+    % (B) Cisteína 298K
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{angulo_CYS-4_298K.png}
+        \caption{Cisteína-4 a 298 K}
+        \label{fig:ang_cys298}
+    \end{subfigure}
+
+    \vspace{0.8cm}
+
+    % (C) Arginina 400K
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{angulo_ARG-3_400K.png}
+        \caption{Arginina-3 a 400 K}
+        \label{fig:ang_arg400}
+    \end{subfigure}\hfill
+    % (D) Cisteína 400K
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{angulo_CYS-4_400K.png}
+        \caption{Cisteína-4 a 400 K}
+        \label{fig:ang_cys400}
+    \end{subfigure}
+    
+    \caption{Evolución temporal de los ángulos de enlace seleccionados en Arginina-3 y Cisteína-4 a 298 K (A, B) y 400 K (C, D).}
+    \label{fig:angulos_panel}
+\end{figure}
+
+
+\subsection{Distribución de Velocidades Atómicas}
+
+Se extrajeron los módulos y las componentes de velocidad atómica empleando el flag \texttt{-len} del comando \texttt{gmx traj}, escribiendo en la línea de comandos:
+
+\begin{verbatim}
+    gmx traj -f arc.trr -s arc.tpr -xvg none -ov -len
+\end{verbatim}
+
+Los histogramas de velocidad ponen en relieve el cumplimiento de la función de distribución de Maxwell-Boltzmann. Por ejemplo, al analizar átomos de distinta masa a 298 K, se observó que los átomos más ligeros, como el hidrógeno HA del residuo ALA-2 (1 uma), presentan distribuciones anchas con velocidades medias muy elevadas (2.512 nm/ps en su módulo). En contraste, los átomos más pesados, como el azufre SG de CYS-4 (32 uma), mostraron distribuciones estrechas y desplazadas hacia velocidades inferiores (0.448 nm/ps). Esta diferencia en la dispersión según la masa puede apreciarse visualmente en las componentes espaciales ($v_x, v_y, v_z$) mostradas en la Figura \ref{fig:vel_comp_298K}, mientras que los valores exactos del promedio desplazado se evidencian en la distribución de los módulos (Figura \ref{fig:vel_modulos}A).
+
+Al elevar la temperatura de la simulación a 400 K, el comportamiento cinético de los átomos se dividió en dos tendencias. Por un lado, los átomos más pesados y centrales de la estructura (como CA, CZ y SG) mostraron un ensanchamiento espacial (Figura \ref{fig:vel_comp_400K}) y el desplazamiento de sus módulos hacia velocidades mayores (Figura \ref{fig:vel_modulos}B), tal y como exige la termodinámica al aumentar la energía del sistema. 
+
+Por otro lado, los átomos más ligeros y periféricos (como el hidrógeno HA y el oxígeno O) mostraron un descenso en su velocidad media. Esto podría ser porque, a una temperatura tan extrema, estos átomos tendrían una velocidad tan elevada que el propio sistema los restringe para funcionar.
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{velocidad_298.png}
+    \caption{Distribución de las componentes de velocidad ($v_x, v_y, v_z$) a 298 K. Se aprecia el efecto de la masa en la velocidad, presentando el átomo ligero HA (primera fila) campanas de Gauss mucho más anchas que el átomo pesado SG (cuarta fila).}
+    \label{fig:vel_comp_298K}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{velocidad_400.png}
+    \caption{Distribución de las componentes de velocidad a 400 K. Se observa un ensanchamiento generalizado de las campanas respecto a la simulación a 298 K.}
+    \label{fig:vel_comp_400K}
+\end{figure}
+
+
+\begin{figure}[H]
+    \centering
+    % Módulos a 298K
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{modulo_velocidad_298.png}
+        \caption{Módulos a 298 K}
+        \label{fig:mod_298K}
+    \end{subfigure}\hfill
+    % Módulos a 400K
+    \begin{subfigure}[b]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{modulo_velocidad_400.png}
+        \caption{Módulos a 400 K}
+        \label{fig:mod_400K}
+    \end{subfigure}
+    
+    \caption{Distribución del módulo de la velocidad ($|v|$) de diferentes átomos en la simulación a 298 K y 400 K.}
+    \label{fig:vel_modulos}
+\end{figure}
+
+
+
+\subsection{Análisis Ángulos Diedros $\Phi$ y $\Psi$}
+
+Para el cálculo de los ángulos diedros phi ($\Phi$) y psi ($\Psi$) del esqueleto peptídico, se utilizó el siguiente comando:
+
+\begin{verbatim}
+gmx rama -f arc.trr -s arc.tpr -xvg none
+\end{verbatim}
+
+A partir del archivo de salida general generado (\texttt{rama.xvg}), se procedió a aislar los valores individuales para cada residuo. Por ejemplo, para extraer y enumerar temporalmente los ángulos $\Psi$ del residuo ARG-3, se empleó la siguiente sintaxis:
+
+\begin{verbatim}
+grep "ARG-3" rama.xvg | awk '{print $2}' | cat -n > psi-arg-3.dat
+\end{verbatim}
+
+Este mismo procedimiento se repitió para aislar los ángulos $\Phi$. Además, se crearon archivos combinados con las coordenadas espaciales $(\Phi, \Psi)$ de cada aminoácido (ALA-2, ARG-3 y CYS-4) para su posterior visualización y análisis probabilístico en los diagramas de Ramachandran.
+
+Los diagramas de Ramachandran muestran cómo la temperatura afecta la estructura del péptido. A 298 K, ambos residuos son muy poco flexibles y se mantienen en posiciones estables. El residuo ARG-3 se sitúa en el cuadrante superior izquierdo ($\Phi \approx -140^\circ, \Psi \approx +50^\circ$) (Figura \ref{fig:rama_arg3_298}), mientras que el CYS-4 se queda en el cuadrante inferior izquierdo ($\Phi \approx -80^\circ, \Psi \approx -50^\circ$), una zona típica de las hélices alfa ($\alpha_R$) (Figura \ref{fig:rama_cys4_298}).
+
+Al subir la temperatura a 400 K, el tripéptido no pierde su estructura por completo, pero si adopta nuevas posturas estables. El ARG-3 se desplaza un poco más arriba dentro de la zona de lámina beta ($\Psi \approx +130^\circ$) (Figura \ref{fig:rama_arg3_400}). El cambio más radical lo da el CYS-4, que salta desde la zona de hélice alfa (abajo) hacia la zona de lámina beta (arriba a la izquierda, $\Psi \approx +120^\circ$) (Figura \ref{fig:rama_cys4_400}).
+
+
+\begin{figure}[H]
+    \centering
+    % ARG-3 a 298K
+    \begin{subfigure}[b]{0.85\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{ramachandran_ARG_3_298K.png}
+        \caption{Evolución y mapa de densidad para ARG-3 a 298 K}
+        \label{fig:rama_arg3_298}
+    \end{subfigure}
+    
+    \vspace{0.8cm}
+    
+    % ARG-3 a 400K
+    \begin{subfigure}[b]{0.85\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{ramachandran_ARG_3_400K.png}
+        \caption{Evolución y mapa de densidad para ARG-3 a 400 K}
+        \label{fig:rama_arg3_400}
+    \end{subfigure}
+    
+    \caption{Análisis conformacional del residuo central ARG-3.}
+    \label{fig:rama_arg3}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    % CYS-4 a 298K
+    \begin{subfigure}[b]{0.85\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{ramachandran_CYS_4_298K.png}
+        \caption{Evolución y mapa de densidad para CYS-4 a 298 K}
+        \label{fig:rama_cys4_298}
+    \end{subfigure}
+    
+    \vspace{0.8cm}
+    
+    % CYS-4 a 400K
+    \begin{subfigure}[b]{0.85\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{ramachandran_CYS_4_400K.png}
+        \caption{Evolución y mapa de densidad para CYS-4 a 400 K}
+        \label{fig:rama_cys4_400}
+    \end{subfigure}
+    
+    \caption{Análisis conformacional del residuo CYS-4.}
+    \label{fig:rama_cys4}
+\end{figure}
+    
+\section{Análisis Extendido (500 ps)}
+
+Se llevó a cabo una simulación de dinámica molecular de alta resolución temporal a 298 K para profundizar en el estudio cinemático y conformacional del péptido.
+
+Toda la información ha sido obtenida usando la misma metodología y comandos comentados en los apartados anteriores.
+
+\subsection{Parámetros de Simulación}
+Con el objetivo de capturar las fluctuaciones térmicas y estructurales más rápidas, se incrementó drásticamente la frecuencia de escritura de la trayectoria. La simulación constó de 1000000 pasos (\texttt{nsteps}) de 2 fs, alcanzando un tiempo total de 500 ps. Los datos de coordenadas (\texttt{nstxout}), velocidades (\texttt{nstvout}), energías (\texttt{nstenergy}) y el registro del log (\texttt{nstlog}) se guardaron cada 20 pasos, equivaliendo a un muestreo intensivo cada 10 fs.
+
+\subsection{Temperatura y Velocidades Atómicas}
+Este muestreo de alta resolución nos permite validar de forma robusta la termodinámica del sistema. En primer lugar, el histograma de la temperatura (Figura \ref{fig:hist_temp_ext}) confirma que el termostato mantuvo el sistema oscilando correctamente en torno al valor objetivo de 298 K.
+
+\begin{figure}[H]
+     \centering
+     \includegraphics[width=0.7\textwidth]{extended_histograma.png}
+     \caption{Distribución de la temperatura del sistema durante los 500 ps de simulación de alta resolución.}
+     \label{fig:hist_temp_ext}
+ \end{figure}
+
+Por otro lado, se extrajeron las componentes de la velocidad ($v_x$, $v_y$, $v_z$) para los mismos cinco átomos de antes. Tal y como se observa en la Figura \ref{fig:vel_componentes}, las tres componentes presentan distribuciones gaussianas centradas en 0, cumpliendo la distribución de Maxwell-Boltzmann a 298 K.
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{extended_velocidad.png} 
+    \caption{Histogramas de frecuencia para las componentes de velocidad ($v_x, v_y, v_z$) calculadas con muestreo de 10 fs.}
+    \label{fig:vel_componentes}
+\end{figure}
+
+\subsection{Análisis Conformacional: Mapas de Ramachandran}
+Se generaron diagramas de Ramachandran para cada uno de los péptidos. Gracias al muestreo cada 10 fs, se obtuvieron mapas de alta densidad (Figura \ref{fig:ramachandran_tres_residuos}) que permiten observar con  precisión las conformaciones de mayor probabilidad.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{extended_ramachandran.png} 
+    \caption{Diagramas de Ramachandran (muestreo 10 fs) para los tres residuos del péptido a 298 K. El uso de la trayectoria de 500 ps permite un muestreo intensivo, revelando preferencias estructurales claras y estables para cada aminoácido.}
+    \label{fig:ramachandran_tres_residuos}
+\end{figure}
+
+Los resultados (Figura \ref{fig:ramachandran_tres_residuos}) muestran cómo cada residuo adopta estructuras distintas:
+\begin{itemize}
+    \item \textbf{ALA-2:} Mostró cierta flexibilidad conformacional, cambiando entre dos mínimos de energía claramente diferenciados. Uno de ellos está en la región extendida de lámina beta (cuadrante superior izquierdo, $\Phi \approx -80^\circ, \Psi \approx +140^\circ$) y el otro en la región de la hélice alfa levógira ($\alpha_L$, cuadrante superior derecho, $\Phi \approx +60^\circ, \Psi \approx +50^\circ$).
+    \item \textbf{ARG-3:} Mostró la mayor restricción conformacional de los tres residuos. Su mínimo de energía se encuentra en el cuadrante superior izquierdo ($\Phi \approx -70^\circ, \Psi \approx +130^\circ$). Esto indica una preferencia fuerte y estable por conformaciones extendidas, compatibles con estructuras de lámina beta.
+    \item \textbf{CYS-4:} Muestra un equilibrio entre dos estados. Su mínimo de energía global se sitúa en el cuadrante inferior izquierdo ($\Phi \approx -70^\circ, \Psi \approx -45^\circ$), característico de la hélice alfa dextrógira ($\alpha_R$). Sin embargo, también se presenta en el cuadrante superior izquierdo (región $\beta$, $\Phi \approx -90^\circ, \Psi \approx +130^\circ$), demostrando que transiciona entre una estructura expandida y una helicoidal.
+\end{itemize}
+
+En conclusión, la simulación extendida demuestra que, a 298 K, el péptido no es una estructura rígida. En su lugar, se comporta como un sistema dinámico donde cada residuo tiene sus propios mínimos de energía locales ($\alpha_R, \alpha_L, \beta$), permitiendo ciertas transiciones conformacionales mientras mantiene una alta estabilidad termodinámica global.
+
+\section{GitHub}
+Todos los archivos con un peso menor a 100 MB creados durante la simulación con GROMACS están disponibles en el siguiente enlace de GitHub:
+
+\url{https://github.com/Alejandro-RG3/ModeladoMolecular-TrabajoARC.git}
+
+Asimismo, también se encuentra el notebook con el que se han realizado las gráficas en Python y el informe del trabajo (tanto el archivo .tex como este .pdf).
+
+\end{document}
